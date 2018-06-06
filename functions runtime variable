@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -x
+
+        echo "filedir: $1"
+        echo "copydir: $2"
+        filedir=$1
+        copydir=$2
+
+extract(){
+
+        tar -xvf $filedir -C $copydir
+        ret=$?
+return $ret
+}
+
+delete(){
+
+        rm -rf $filedir
+        ret=$?
+ return $ret
+}
+
+main(){
+
+        extract
+        delete
+        ret=$?
+return $ret
+}
+main "$@"
+exit $?
