@@ -1,0 +1,35 @@
+#!/bin/bash
+set -x
+PG_USER=postgres
+DATABASE= testing
+SERVER=x.x.x.x
+DIR="$HOME/pg_bak"
+DATE=$(date +"%m%d%y")
+FILE="$DATABASE_$DATE"
+Srcdir="/opt/"
+Destdir="/var/"
+Filename=tomcat-$DATE.tgz
+
+appbackup(){
+#tar --create --gzip --file=$DESTDIR$FILENAME $SRCDIR
+        tar czf $Destdir$Filename $Srcdir
+        ret=$?
+return $ret
+}
+
+databasebackup(){
+
+       pg_dump -h $SERVER -U $PG_USER $DATABASE -f $FILE.sql  
+        ret=$?
+ return $ret
+}
+
+main(){
+
+        appbackup
+        databasebackup
+        ret=$?
+return $ret
+}
+main "$@"
+exit $?
