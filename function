@@ -1,0 +1,26 @@
+#!/bin/bash
+extract(){
+
+        filedir=/opt/apache-tomcat-8.5.30.tar.gz
+        copydir=/var/backups
+        tar -xvf $filedir -C $copydir
+        ret=$?
+return $ret
+}
+
+delete(){
+
+        rm -rf $filedir
+        ret=$?
+ return $ret
+}
+
+main(){
+
+        extract
+        delete
+        ret=$?
+return $ret
+}
+main "$@"
+exit $?
