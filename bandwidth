@@ -1,0 +1,36 @@
+#!/bin/bash
+set -x
+extract()
+      {
+     
+      script -q -c "scp -p /mnt/test ubuntu@192.168.0.174:/tmp" > /tmp/out 2>&1
+      cat /tmp/out
+      ret=$?
+return $ret
+     }
+
+ipaddr()
+     {
+     iwgetid -r
+     ret=$?
+return $ret
+     }
+
+santhosh()
+    {
+    date +%H
+    ret=$?
+return $ret
+  }
+
+main()
+   { 
+   extract
+   ipaddr
+   santhosh
+  ret=$?
+return $ret
+}
+
+main"$@"
+exit $?
