@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -x
+#echo "file: $1"
+#file=$1
+ftp_user=ftpuser
+ftp_pass=ftpuser
+server=192.168.0.58
+destdir="/opt"
+
+ftpserver()
+{
+       cd $destdir
+        file=$1
+       wget ftp://$ftp_user:$ftp_pass@$server/$file
+       ret=$?
+return $ret
+}
+
+santosh()
+{
+       if [ "$#" -eq 1 ]
+       then
+          ftpserver
+       else
+         echo "Enter only one argument"
+        ret=$?
+        return $ret
+        fi
+}
+
+santosh $*
+exit $?
