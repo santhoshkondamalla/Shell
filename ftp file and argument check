@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -x
+file=$1
+ftp_user=ftpuser
+ftp_pass=ftpuser
+server=192.168.0.58
+destdir="/opt"
+
+urlcheck()
+        {
+if wget --spider ftp://$ftp_user:$ftp_pass@192.168.0.58/$file 2>/dev/null;then
+   echo " file $file"
+else
+   echo "file is not exist in ftp server"
+fi
+ret=$?
+return $ret
+         }
+
+ftpserver()
+      {
+       cd $destdir
+       wget ftp://$ftp_user:$ftp_pass@$server/$file
+       ret=$?
+       return $ret
+       }
+
+santosh()
+       {
+       if [ "$#" -eq 1 ]
+       then
+          ftpserver
+          urlcheck
+       else
+          echo "Enter only one argument"
+       ret=$?
+       return $ret
+       fi
+        }
+santosh $*
+exit $?
+
+
+
+this script descried
+1.enter only argument else false
+2.fiel exists in ftp server else false
+3.if exists copy to destination floder
