@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -x
+echo "file: $1"
+file=$1
+ftp_user=ftpuser
+ftp_pass=ftpuser
+server=192.168.0.58
+destdir="/opt"
+
+ftpserver()
+{
+       cd $destdir
+       wget ftp://$ftp_user:$ftp_pass@$server/$file
+       ret=$?
+return $ret
+}
+main()
+{
+     ftpserver
+     ret=$?
+        return $ret
+}
+main "$@"
+exit $?
+
+exec: ./ftp.sh santhosh-10.tar.gz
