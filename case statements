@@ -1,0 +1,23 @@
+#!/bin/bash
+echo "Welcome to AWS cli script"
+listinst(){
+aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`] | [0].Value,InstanceId,InstanceType,PublicIpAddress, PrivateIpAddress,State.Name]'
+}
+listami(){
+aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`] | [0].Value,InstanceId,InstanceType,ImageId]'
+}
+listvol() {
+aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].BlockDeviceMappings[*].{HDD: DeviceName,VolumeID: Ebs.VolumeId}'
+}
+listip() {
+aws ec2 describe-instances  --output table    --query 'Reservations[*].Instances[*].NetworkInterfaces[*].{PrivateIP: PrivateIpAddress,VPC: VpcId,PublicIP: Association.PublicIp}'
+}
+read -p "Please select one option[listinst/listami/listvol/listip] :   "  op1
+op2=`echo "$op1" | tr [:upper:] [:lower:]`
+case  $op2  in
+	listinst) echo "your total instances are $(listinst)"  ;;
+	listami) echo "your total instances ami's are $(listami)"  ;;
+	listvol) echo "your total instances volumes are $(listvol)"  ;;
+	listip) echo "your total instances IP adresses and security groups  are $(listip)"  ;;
+            *) echo "Invalid input Please enter valid input" 
+esac
