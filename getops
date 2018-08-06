@@ -1,0 +1,31 @@
+#!/bin/bash
+listinst=$(aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`] | [0].Value,InstanceId,InstanceType,PublicIpAddress, PrivateIpAddress,State.Name]')
+
+listami=$(aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`] | [0].Value,InstanceId,InstanceType,ImageId]')
+
+listvol=$(aws ec2 describe-instances   --output table   --query 'Reservations[*].Instances[*].BlockDeviceMappings[*].{HDD: DeviceName,VolumeID: Ebs.VolumeId}')
+
+listeip=$(aws ec2 describe-instances  --output table    --query 'Reservations[*].Instances[*].NetworkInterfaces[*].{PrivateIP: PrivateIpAddress,VPC: VpcId,PublicIP: Association.PublicIp}')
+
+while getopts "i:a:v:e:h:" op ; do
+
+case  $op  in
+		i) echo -e "$OPTARG \n $listinst" 
+		 	;;
+		a) echo -e "$OPTARG \n $listami" 
+			;;
+		v) echo -e "$OPTARG \n $listvol" 
+			;;
+		e) echo  -e "$OPTARG \n $listeip" 
+                        ;;
+            	h)echo -e "Please run the script as below\n \033[32m #sh  `basename $0` -i listinst  -a listami -v listvol -e listeip \033[0m "
+			;;
+            	\?) echo -e "\033[1;31m OOPS!!! You have Entered Invalid input\033[0m \n Please run the script as below\n \033[32m #sh  `basename $0` -i listinst  -a listami -v listvol -e listeip \033[0m " 
+                       	;; 
+            	*)echo -e "\033[1;31m OOPS!!! You have Entered Invalid input\033[0m \n Please run the script as below\n \033[32m #sh  `basename $0` -i listinst  -a listami -v listvol -e listeip \033[0m " 
+                        ;;
+esac
+
+done
+
+shift $((OPTIND -1))
