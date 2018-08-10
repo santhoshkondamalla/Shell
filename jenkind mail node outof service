@@ -1,0 +1,14 @@
+after elb script executes then this script is executed in jenkins
+
+#!/bin/bash
+input=`cat /tmp/elb.txt | grep -w OutOfService`
+output=`cat /tmp/elb.txt | grep -o i-.*`
+if [ "$input" != "" ]
+then
+echo "Failed ELB instances for mumbai region are given below: $output"
+exit 1
+else
+echo "No failed ELB instances in Mumbai"
+fi
+
+
