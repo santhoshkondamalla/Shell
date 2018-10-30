@@ -1,0 +1,118 @@
+#/bin/bash
+set -x
+today=`date '+%Y_%m_%d_%H%M_%S'`;
+home_path=/home/skondamalla/Videos
+inouttime()
+	{	
+#	report.txt=$(/usr/bin/ssconvert attendence.xls attendence.csv && cat attendence.csv  | awk -F"," '{print $2,$4,$5,$7}' > report.txt  && sed -i 1,5d report.txt && rm -rf attendence.xls attendence.csv)
+#	echo $report.txt
+	report=$(/usr/bin/ssconvert $home_path/attendence.xls $home_path/attendence.csv && cat $home_path/attendence.csv  | awk -F"," '{print $2,$4,$5,$7}' > $home_path/report.txt  && sed -i 1,5d $home_path/report.txt) 
+	ret=$?
+	return $ret
+	}
+
+breaktime()
+	{
+#	breaktime=$(pdfgrep ABH_* rptviewer.pdf  | awk '{print $1}' > biometric1.txt && pdfgrep "Total OUT Time" rptviewer.pdf | awk '{print $4}' > biometric2.txt && paste biometric1.txt biometric2.txt > biometric.txt && rm -rf biometric1.txt biometric2.txt rptviewer.pdf)
+#	echo $breaktime.txt
+	breaktime=$(/usr/bin/pdfgrep "ABH_*" $home_path/rptviewer.pdf  | awk '{print $1}' > $home_path/biometric1.txt && pdfgrep "Total OUT Time" $home_path/rptviewer.pdf | awk '{print $4}' > $home_path/biometric2.txt && paste $home_path/biometric1.txt $home_path/biometric2.txt > $home_path/biometric.txt && rm -rf $home_path/rptviewer.pdf $home_path/biometric1.txt $home_path/biometric2.txt)
+	ret=$?
+	return $ret
+	}
+
+names()
+	{
+        name=$(cat $home_path/attendence.csv  | awk -F"," '{print $2,$3}' > $home_path/names.txt  && sed -i 1,5d $home_path/names.txt && rm -rf $home_path/rptviewer.pdf $home_path/attendence.xls $home_path/attendence.csv)
+	ret=$?
+	return $ret
+	}
+
+calculate()
+	{
+	attendance_file=''$home_path'/report.txt'
+	breaktime_file=''$home_path'/biometric.txt'
+	name_file=''$home_path'/names.txt'
+	break_counter=0
+#	name_counter=0
+
+	function search() {
+		local FUNC=search
+		search_string="$1"
+		e="$2"
+
+		shift
+		for e; do [[ "$e" == "$search_string" ]] && return 0; done
+		return 1
+	}
+
+	IFS=$'\n'
+	attendance=( $(cat $attendance_file | tr " " ",") )
+	breaktime=( $(cat $breaktime_file | tr "\t" ",") )
+	#names=( $(cat $name_file | tr " "",") )
+	names=( $( cat $name_file | awk -F'"' '$0=$2' ) )
+#	echo "Current count of name ${#names[@]}"
+
+	if [[ ${#attendance[@]} -gt 0 && ${#breaktime[@]} -gt 0 ]]; then
+	#	echo -e "Attendance records:\t" ${#attendance[@]}
+	#	echo -e "BreakTime records:\t" ${#breaktime[@]}
+
+		for ((a=0; a<${#breaktime[@]}; a++))
+		do
+			breaktime_id+=( $( echo ${breaktime[$a]} | awk -F"," '{print $1}') )
+		done
+
+		#echo -e "Total records in BreakTime-ID's:\t" ${#breaktime_id[@]}
+
+		for ((i=0; i<${#attendance[@]}; i++))
+		do
+			name_map=${names[$i]}
+			#echo -e "Current Name is: ${names[$i]}"
+			attendance_record=$( echo ${attendance[$i]} | awk -F"," '{print $1}' )
+			if [[ $(search "$attendance_record" "${breaktime_id[@]}"; echo $?) -eq 0 ]]; then
+#				echo -e "${attendance[$i]} has a break time..."
+				breaktime_record=$( echo ${breaktime[$break_counter]} | awk -F"," '{print $2}' )
+	#			echo -e "BreakTime record:\t"$breaktime_record
+				all_attendance+=( ${attendance[$i]}","$breaktime_record )
+	#			echo ${#all_attendance[@]}
+				break_counter=`expr $break_counter + 1`
+			else
+	#			echo -e "${attendance[$i]} doesnot have a in BreakTime..."
+				all_attendance+=( ${attendance[$i]}",00:00" )
+			fi
+			name_attendance+=( $name_map","${all_attendance[$i]} )
+		done
+		for ((b=0; b<${#all_attendance[@]}; b++))
+		do
+			echo -e ${name_attendance[$b]}
+		done
+	else
+		echo -e "Someting went wrong in fetching attendance and breaktime records..."
+	fi	
+		} > $today.txt
+csvreport()
+	{
+	cat $home_path/$today.txt | tr "\t" "," > $today.csv && rm -rf $home_path/$today.txt
+        ret=$?
+	return $ret
+	}
+mail()
+	{
+#	/usr/bin/mail -s "Biometric report" santosh.kondamalla@abhrainc.com -A $home_path/$today.csv 
+        /usr/bin/mutt -s "Biometric" -a $home_path/$today.csv  -c amol.patalay@abhrainc.com < $home_path/Messagebody && rm -rf $home_path/$today.csv $home_path/report.txt $home_path/biometric.txt $home_path/names.txt
+	ret=$?
+	return $ret
+	}
+main()
+	{
+	inouttime
+	breaktime
+	names
+	calculate
+	csvreport
+	mail
+ret=$?
+return $ret
+} 
+
+main"$@"
+exit $?
