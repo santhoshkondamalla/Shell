@@ -1,0 +1,108 @@
+#/bin/bash
+set -x
+today=`date '+%Y%m%d'`
+home_path='/var/www/html/upload'
+
+
+function inouttime() {
+	delete=$(rm -rf $home_path/*.csv)	
+	report=$(/usr/bin/ssconvert $home_path/attendence.xls $home_path/attendence.csv && cat $home_path/attendence.csv  | awk -F"," '{print $2,$4,$5,$7}' > $home_path/report.txt  && sed -i 1,5d $home_path/report.txt)
+	
+	breaktime=$(/usr/bin/pdfgrep "ABH_*" $home_path/rptviewer.pdf  | awk '{print $1}' > $home_path/biometric1.txt && pdfgrep "Total OUT Time" $home_path/rptviewer.pdf | awk '{print $4}' > $home_path/biometric2.txt && paste $home_path/biometric1.txt $home_path/biometric2.txt > $home_path/biometric.txt && rm -rf $home_path/rptviewer.pdf $home_path/biometric1.txt $home_path/biometric2.txt)
+	
+        name=$(cat $home_path/attendence.csv  | awk -F"," '{print $2,$3}' > $home_path/names.txt  && sed -i 1,5d $home_path/names.txt && rm -rf $home_path/rptviewer.pdf $home_path/attendence.xls $home_path/attendence.csv)
+	ret=$?
+	return $ret
+}
+
+function search() {
+	local FUNC=search
+	search_string="$1"
+	e="$2"
+
+	shift
+	for e; do [[ "$e" == "$search_string" ]] && return 0; done
+	return 1
+}
+
+
+function calculate() {
+	attendance_file="$home_path/report.txt"
+	echo "attendance file:  $attendance_file"
+	breaktime_file="$home_path/biometric.txt"
+	name_file="$home_path/names.txt"
+	break_counter=0
+#	name_counter=0
+
+	IFS=$'\n'
+	attendance=( $(cat $attendance_file | tr " " ",") )
+	breaktime=( $(cat $breaktime_file | tr "\t" ",") )
+	#names=( $(cat $name_file | tr " "",") )
+	names=( $( cat $name_file | awk -F'"' '$0=$2' ) )
+#	echo "Current count of name ${#names[@]}"
+
+	echo "attendance count ${#attendance[@]} and break count ${#breaktime[@]}"
+
+	if [[ ${#attendance[@]} -gt 0 && ${#breaktime[@]} -gt 0 ]]; then
+	#	echo -e "Attendance records:\t" ${#attendance[@]}
+	#	echo -e "BreakTime records:\t" ${#breaktime[@]}
+
+		for ((a=0; a<${#breaktime[@]}; a++))
+		do
+			breaktime_id+=( $( echo ${breaktime[$a]} | awk -F"," '{print $1}') )
+		done
+
+		#echo -e "Total records in BreakTime-ID's:\t" ${#breaktime_id[@]}
+
+		for ((i=0; i<${#attendance[@]}; i++))
+		do
+			name_map=${names[$i]}
+			#echo -e "Current Name is: ${names[$i]}"
+			attendance_record=$( echo ${attendance[$i]} | awk -F"," '{print $1}' )
+			if [[ $(search "$attendance_record" "${breaktime_id[@]}"; echo $?) -eq 0 ]]; then
+#				echo -e "${attendance[$i]} has a break time..."
+				breaktime_record=$( echo ${breaktime[$break_counter]} | awk -F"," '{print $2}' )
+	#			echo -e "BreakTime record:\t"$breaktime_record
+				all_attendance+=( ${attendance[$i]}","$breaktime_record )
+	#			echo ${#all_attendance[@]}
+				break_counter=`expr $break_counter + 1`
+			else
+	#			echo -e "${attendance[$i]} doesnot have a in BreakTime..."
+				all_attendance+=( ${attendance[$i]}",00:00" )
+			fi
+			name_attendance+=( $name_map","${all_attendance[$i]} )
+		done
+		for ((b=0; b<${#all_attendance[@]}; b++))
+		do
+			echo -e "${name_attendance[$b]}" >> $home_path/$today.txt
+		done
+	else
+		echo -e "Someting went wrong in fetching attendance and breaktime records..."
+	fi	
+}
+
+function csvreport() {
+	cat $home_path/$today.txt | tr "\t" "," > $home_path/$today.csv && rm -rf $home_path/$today.txt $home_path/report.txt $home_path/biometric.txt $home_path/names.txt
+        ret=$?
+	return $ret
+}
+
+
+main() {
+	inouttime
+	if [[ $? -eq 0 ]]; then
+		calculate
+		if [[ $? -eq 0 ]]; then
+		  	csvreport
+		else 
+			return 1
+		fi
+	else
+		return 1
+	fi
+	ret=$?
+	return $ret
+} 
+
+main"$@"
+exit $?
