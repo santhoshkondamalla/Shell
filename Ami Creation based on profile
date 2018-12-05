@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Create an image (AMI) or each running EC2 instance in the single region.
+#       Instances are NOT rebooted.
+
+### OPTIONS ###
+
+#the AWS account i want to use. 
+AWSPROFILE="santhosh" 
+    
+### END OPTIONS ###
+
+# Create a list of running EC2's.
+aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId]' --filters Name=instance-state-name,Values=running --output text --profile ${AWSPROFILE} > /tmp/aws.${AWSPROFILE}.running
+
+# Cycle through the list and start the iamgeing process.
+DATE=`date +%Y-%m-%d`
+for INSTANCE in `cat /tmp/aws.${AWSPROFILE}.running`
+do
+        echo "Starting to create the image for instance ${INSTANCE}"
+        aws ec2 create-image --instance-id ${INSTANCE} --name "Backup of ${INSTANCE} on ${DATE} by AGIX" --no-reboot --profile ${AWSPROFILE}
+done
+
+echo "The process will continue for some time..."
