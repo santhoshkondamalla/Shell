@@ -1,0 +1,20 @@
+#!/bin/bash
+
+#%a returns the abbreviated weekday name
+#%A returns the full weekday name
+#%d returns the day of the month 
+#%Y returns the full 4 digit year
+#%y returns the 2 digit year
+
+#set the date for the log name
+TODAY=`(date +"%Y-%m-%d")`
+#set the number of days back you want to go
+for i in 1 2 3 
+do
+WEEKOLD=`(date +"%b %d"  --date="$i days ago")`
+
+#This echo is used for testing the variable output
+#echo "$WEEKOLD"
+cat /var/log/kern.log | grep "$WEEKOLD" >> "$TODAY".txt
+
+done
