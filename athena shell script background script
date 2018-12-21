@@ -1,0 +1,58 @@
+#! /usr/bin/env bash
+
+# set -x
+
+
+LOCAL_BIN=/usr/local/bin
+PROFILE=telx-ms2-east
+REGION=us-east-1
+LOG_BUCKET=telx-us-east-1-logs
+RESULT_BUCKET=telx-us-east-1-logs
+QUERY_OUTFILE=/tmp/telx-test-query-file.csv
+DBNAME=telx_virginia_db
+ENV_TYPE=all                #[all|management|dev|stage|prod]
+
+# *** DB OPS ***
+
+#UTIL=db
+#ACTION=CreateDB                # [CreateDB|ListDB|DeleteDB]
+
+
+# *** TABLE OPS ***
+
+#UTIL=table
+#ACTION=CreateTable               #[CreateTable|ListTable|DeleteTable]
+#LOGTYPE=VpcLogs                # [VpcLogs|AlbLogs|ElbLogs] --- Needed only when ACTION=[CreateTable|DeleteTable] ---
+
+
+# *** CUSTOM QUERY OPS ***
+
+#UTIL=query
+#LOGTYPE=CustomLog
+#ACTION=CustomQuery
+#QUERY_TXT_FILE=/tmp/drop_partition
+
+
+# *** VPC QUERY OPS ****
+
+UTIL=query
+LOGTYPE=VpcLogs                # [VpcLogs|AlbLogs|ElbLogs]
+ACTION=SrcIpHitCount           #[RejectHit|SrcIpHitCount]
+#ACTION=RejectHit           #[RejectHit|SrcIpHitCount]
+#SRCIP=183.83.184.12              # only when ACTION=[SrcIpHitCount]
+SRCIP=45.127.59.53              # only when ACTION=[SrcIpHitCount]
+DATE=2018-12-18                # --- Date for
+                                #       - Year  : YYYY
+                                #       - Month : YYYY-MM
+                                #       - Day   : YYYY-MM-DD (as per the VPC log format) ---
+
+
+
+# *** ELB/ALB QUERY OPS ***
+
+#UTIL=query
+#LOGTYPE=ElbLogs                    #[ElbLogs|AlbLogs]
+#DATE=2018-12-13                    # --- Date YYYY-MM-DD (as per the ELB log format) ---
+#ACTION=SrcIpURLHitCount               # [HitsCount|SrcIpHitCount|URLHitCount|SrcIpURLHitCount]
+#URL_SEARCH_STRING=dropboxpartners.com   #  --- needed only for Actions [URLHitCount|SrcIpURLHitCount] ---
+#SRCIP=52.46.16.50               # --- needed only for Actions [SrcIpHitCount|SrcIpURLHitCount] ---
