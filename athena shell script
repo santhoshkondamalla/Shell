@@ -1,0 +1,477 @@
+#!/usr/bin/env bash
+
+# --
+# -- notes: bash for local athena utils
+#--- Author : xxxxxxxxxxxxxx
+#--- Version: 1.0
+#
+#set -x
+BASH_COMMON_PATH=/usr/local/bin/bash-common
+source $BASH_COMMON_PATH
+DESCRIPTION="common AWS Atehna actions"
+PROGNAME=$0
+AWS_ACCOUNT=$($LOCAL_BIN/aws --profile $PROFILE sts get-caller-identity --query Account)
+
+# globals envs
+# ----
+# --- want to output to syslogs and stderr?
+#LOGGING=${FAILED_STATE}  # don't want to log to syslog, just output to screen
+#LOGGING=${OK_STATE}  # output to syslog and stderr via logger
+LOGGING=3
+#---- global VARS
+# see PROFILE
+#---------
+
+
+db_action(){
+    local FUNC=db_action
+    local config=$1
+    local RET=$FAILED_STATE
+    local QUERY_ID=NULL
+    local s3bucket=$RESULT_BUCKET/AthenaResults
+    local DATABASE=$DBNAME
+
+    log_msg "$PROGNAME started with Action : $ACTION" "$DBNAME"
+
+    case $ACTION in
+    CreateDB)
+        QUERY_ID=$($LOCAL_BIN/aws --profile $PROFILE --region $REGION athena start-query-execution --query-string "CREATE DATABASE IF NOT EXISTS $DATABASE" --result-configuration OutputLocation=s3://$s3bucket)
+        [[ $? -eq $OK_STATE ]] && RET=$OK_STATE && echo "Successfully Created $DATABASE";;
+    DeleteDB)
+        QUERY_ID=$($LOCAL_BIN/aws --profile $PROFILE --region $REGION athena start-query-execution --query-string "DROP DATABASE IF EXISTS $DATABASE" --result-configuration OutputLocation=s3://$s3bucket)
+        [[ $? -eq $OK_STATE ]] && RET=$OK_STATE && echo "Successfully Deleted $DATABASE";;
+    ListDB)
+        QUERY_ID=$($LOCAL_BIN/aws --profile $PROFILE --region $REGION athena start-query-execution --query-string "SHOW DATABASES" --result-configuration OutputLocation=s3://$s3bucket)
+        [[ $? -eq $OK_STATE ]] && RES=$($LOCAL_BIN/aws --profile $PROFILE --region $REGION athena get-query-results --query-execution-id $QUERY_ID | awk '{print $2}')
+        [[ $? -eq $OK_STATE ]] && echo -e "List of Databases :- \n$RES" && RET=$OK_STATE ;;
+     *) echo "Provide valid db action" ;;
+    esac
+
+    return $RET
+}
+
+table_action(){
+    local FUNC=table_action
+    local QUERY_ID=NULL
+    local RET=${FAILED_STATE}
+    local OUTFILE=/tmp/$PROGNAME-$LOGTYPE.txt
+    local ATHENA_CMD="$LOCAL_BIN/aws --profile $PROFILE --region $REGION athena"
+    local DATABASE=$DBNAME
+
+
+    AWS_ACCOUNT=$($LOCAL_BIN/aws --profile $PROFILE sts get-caller-identity --query Account)
+
+
+    case $LOGTYPE in
+        VpcLogs)
+                local TABLE=vpc_flow_logs
+                cat > ${OUTFILE} << EOF
+CREATE EXTERNAL TABLE IF NOT EXISTS vpc_flow_logs (
+  version int,
+  account string,
+  interfaceid string,
+  sourceaddress string,
+  destinationaddress string,
+  sourceport int,
+  destinationport int,
+  protocol int,
+  numpackets int,
+  numbytes bigint,
+  starttime int,
+  endtime int,
+  action string,
+  logstatus string
+)
+PARTITIONED BY (dt string)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ' '
+LOCATION 's3://$LOG_BUCKET/VPCFlowLogs/$ENV_TYPE/AWSLogs/$AWS_ACCOUNT/vpcflowlogs/$REGION/'
+TBLPROPERTIES ("skip.header.line.count"="1");
+EOF
+;;
+         AlbLogs)
+                local TABLE=alb_logs
+                cat > ${OUTFILE} << EOF
+                CREATE EXTERNAL TABLE IF NOT EXISTS alb_logs (
+                type string,
+                time string,
+                elb string,
+                client_ip string,
+                client_port int,
+                target_ip string,
+                target_port int,
+                request_processing_time double,
+                target_processing_time double,
+                response_processing_time double,
+                elb_status_code string,
+                target_status_code string,
+                received_bytes bigint,
+                sent_bytes bigint,
+                request_verb string,
+                request_url string,
+                request_proto string,
+                user_agent string,
+                ssl_cipher string,
+                ssl_protocol string,
+                target_group_arn string,
+                trace_id string,
+                domain_name string,
+                chosen_cert_arn string,
+                matched_rule_priority string,
+                request_creation_time string,
+                actions_executed string,
+                redirect_url string,
+                lambda_error_reason string,
+                new_field string
+                )
+                ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
+                WITH SERDEPROPERTIES (
+                'serialization.format' = '1',
+                'input.regex' =
+                '([^ ]*) ([^ ]*) ([^ ]*) ([^ ]*):([0-9]*) ([^ ]*)[:-]([0-9]*) ([-.0-9]*) ([-.0-9]*) ([-.0-9]*) (|[-0-9]*) (-|[-0-9]*) ([-0-9]*) ([-0-9]*) \"([^ ]*) ([^ ]*) (- |[^ ]*)\" \"([^\"]*)\" ([A-Z0-9-]+) ([A-Za-z0-9.-]*) ([^ ]*) \"([^\"]*)\" \"([^\"]*)\" \"([^\"]*)\" ([-.0-9]*) ([^ ]*) \"([^\"]*)\" \"([^\"]*)\"($| \"[^ ]*\")(.*)')
+                LOCATION 's3://${LOG_BUCKET}/AWSLogs/${AWS_ACCOUNT}/elasticloadbalancing/${REGION}/';
+EOF
+;;
+         ElbLogs)
+                local TABLE=elb_logs
+                cat > ${OUTFILE} << EOF
+                CREATE EXTERNAL TABLE IF NOT EXISTS elb_logs (
+                    request_timestamp string,
+                    elb_name string,
+                    request_ip string,
+                    request_port int,
+                    backend_ip string,
+                    backend_port int,
+                    request_processing_time double,
+                    backend_processing_time double,
+                    client_response_time double,
+                    elb_response_code string,
+                    backend_response_code string,
+                    received_bytes bigint,
+                    sent_bytes bigint,
+                    request_verb string,
+                    url string,
+                    protocol string,
+                    user_agent string,
+                    ssl_cipher string,
+                    ssl_protocol string
+                )
+                ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
+                WITH SERDEPROPERTIES (
+                 'serialization.format' = '1',
+                 'input.regex' = '([^ ]*) ([^ ]*) ([^ ]*):([0-9]*) ([^ ]*)[:\-]([0-9]*) ([-.0-9]*) ([-.0-9]*) ([-.0-9]*) (|[-0-9]*) (-|[-0-9]*) ([-0-9]*) ([-0-9]*) \\\"([^ ]*) ([^ ]*) (- |[^ ]*)\\\" (\"[^\"]*\") ([A-Z0-9-]+) ([A-Za-z0-9.-]*)$' )
+                LOCATION 's3://${LOG_BUCKET}/AWSLogs/${AWS_ACCOUNT}/elasticloadbalancing/${REGION}';
+EOF
+;;
+            *)
+                RES="Provide Valid AWS Log Service";;
+        esac
+
+
+    log_msg "$PROGNAME started with $FUNC: $ACTION" "$TABLE"
+
+    case $ACTION in
+        CreateTable)
+            RES=$($ATHENA_CMD start-query-execution --query-string file://$OUTFILE --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults )
+            [[ $? -eq $OK_STATE ]] && RET=$OK_STATE && echo "Successfully created table $TABLE in $DATABASE" ;;
+        ListTable)
+            QUERY_ID=$($ATHENA_CMD start-query-execution --query-string "SHOW TABLES" --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults )
+            [[ $? -eq $OK_STATE ]] && RES=$($ATHENA_CMD get-query-results --query-execution-id $QUERY_ID | awk '{print $2}')
+            [[ $? -eq $OK_STATE ]] && echo -e "List of Tables in $DATABASE :-\n$RES" && RET=$OK_STATE;;
+        DeleteTable)
+            RES=$($ATHENA_CMD start-query-execution --query-string "DROP TABLE IF EXISTS $TABLE PURGE" --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults )
+            [[ $? -eq $OK_STATE ]] && RET=$OK_STATE && echo "Successfully Deleted table $TABLE in $DATABASE" ;;
+        *)
+            echo -e "\t Provide Valid DB Action \n";;
+    esac
+
+    return $RET
+}
+
+vpcquery_ops(){
+
+    local FUNC=vpcquery_ops
+    local RET=$FAILED_STATE
+    local DATABASE=$DBNAME
+    local TABLE=vpc_flow_logs
+    local outfile=/tmp/$PROGNAME-$LOGTYPE-$ACTION.txt
+    local ATHENA_CMD="$LOCAL_BIN/aws --profile $PROFILE --region $REGION athena"
+    local QUERY_ID=NULL
+    local DATE_PATH=$(echo $DATE | sed "s/-/\//g")
+
+#    QUERY_ID=$($ATHENA_CMD start-query-execution --query-string "SHOW PARTITIONS $TABLE" --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults)
+
+    QUERY_ID=$($ATHENA_CMD start-query-execution --query-string "ALTER TABLE $TABLE ADD IF NOT EXISTS PARTITION (dt='$DATE') location 's3://$LOG_BUCKET/VPCFlowLogs/$ENV_TYPE/AWSLogs/$AWS_ACCOUNT/vpcflowlogs/$REGION/$DATE_PATH';" --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults)
+    [[ $? -eq $OK_STATE ]] || return $FAILED_STATE
+
+    case $ACTION in
+        RejectHit)
+            cat > ${outfile} << EOF
+            SELECT sourceaddress, count(*) cnt
+            FROM vpc_flow_logs
+            WHERE action = 'REJECT'
+            GROUP BY sourceaddress
+            ORDER BY cnt desc
+            LIMIT 25
+EOF
+            ;;
+        SrcIpHitCount)
+            cat > ${outfile} << EOF
+            SELECT action, count(*) cnt
+            FROM vpc_flow_logs
+            WHERE sourceaddress = '$SRCIP'
+            GROUP BY action ;
+EOF
+            ;;
+        *)
+            echo -e "\t Provide valid $FUNC Action \n"
+            ;;
+
+    esac
+
+    [[ -f $outfile ]] && return $OK_STATE || return $RET
+
+}
+
+elbquery_ops(){
+    local FUNC=elbquery_ops
+    local RET=$FAILED_STATE
+    local DATABASE=$DBNAME
+    local TABLE=elb_logs
+    local outfile=/tmp/$PROGNAME-$LOGTYPE-$ACTION.txt
+    local ATHENA_CMD="$LOCAL_BIN/aws --profile $PROFILE --region $REGION athena"
+    local QUERY_ID=NULL
+    local URL=$URL_SEARCH_STRING
+
+    case $ACTION in
+        HitsCount)
+            cat > ${outfile} << EOF
+            SELECT request_ip, count(*) cnt
+            FROM ${TABLE}
+            WHERE request_timestamp LIKE '$DATE%'
+            GROUP BY request_ip
+            ORDER BY cnt desc;
+EOF
+            ;;
+        SrcIpHitCount)
+            cat > ${outfile} << EOF
+            SELECT request_ip, count(*) cnt
+            FROM ${TABLE}
+            WHERE request_ip = '${SRCIP}' and request_timestamp LIKE '$DATE%'
+            GROUP BY request_ip
+            ORDER BY cnt desc;
+EOF
+            ;;
+         URLHitCount)
+            cat > ${outfile} << EOF
+            SELECT request_ip, count(*) cnt
+            FROM ${TABLE}
+            WHERE url LIKE '%$URL%' AND request_timestamp LIKE '$DATE%'
+            GROUP BY request_ip
+            ORDER BY cnt desc;
+EOF
+            ;;
+         SrcIpURLHitCount)
+            cat > ${outfile} << EOF
+            SELECT request_ip, count(*) cnt
+            FROM ${TABLE}
+            WHERE url LIKE '%$URL%' AND request_ip = '$SRCIP' AND request_timestamp LIKE '$DATE%'
+            GROUP BY request_ip
+            ORDER BY cnt desc;
+EOF
+            ;;
+         *)
+            echo -e "\t Provide valid $FUNC Action \n"
+            ;;
+    esac
+
+}
+
+verify_query_status() {
+    local FUNC=verify_query_status
+    local QUERY_ID=$1
+    local RET=${FAILED_STATE}
+
+    while true; do
+        QUERY_STATE=$($ATHENA_CMD get-query-execution --query-execution-id $QUERY_ID --query QueryExecution.Status.State)
+        if [ $QUERY_STATE = 'SUCCEEDED' ]; then
+            echo -e "Successfully Query executed and the Query ID is : $QUERY_ID "
+            S3FILE=$($ATHENA_CMD get-query-execution --query-execution-id $QUERY_ID --query QueryExecution.ResultConfiguration.OutputLocation)
+            $LOCAL_BIN/aws --profile $PROFILE s3 cp $S3FILE $QUERY_OUTFILE > /dev/null 2>&1
+            # RES=$($ATHENA_CMD get-query-results --query-execution-id $QUERY_ID 2>&1)
+            # [ $? -eq $OK_STATE ] && RET=$OK_STATE && echo -e "Query Results :- \n$RES" || echo -e "Query Failed :- \n$RES"
+            if [ $? -eq $OK_STATE ]; then
+                echo "Output CSV File" "$QUERY_OUTFILE"
+                return $OK_STATE
+            else
+                echo "Failed to get the Query result" "$QUERY_ID"
+                return $FAILED_STATE
+            fi
+        elif [ $QUERY_STATE = 'RUNNING' ]; then
+            sleep 10
+        else
+            echo -e "QUERY with ID $QUERY_ID: $QUERY_STATE"
+            return $RET
+        fi
+    done
+
+}
+
+query_action(){
+    local FUNC=query_action
+    local RET=${FAILED_STATE}
+    local DATABASE=$DBNAME
+    local ATHENA_CMD="$LOCAL_BIN/aws --profile $PROFILE --region $REGION athena"
+    local QUERY_ID=NULL
+
+     if [ $ACTION != 'CustomQuery' ] ; then
+        local QUERY=/tmp/$PROGNAME-$LOGTYPE-$ACTION.txt
+     else
+        local QUERY=$QUERY_TXT_FILE
+     fi
+
+    log_msg "$PROGNAME started with $FUNC: $LOGTYPE" "$ACTION"
+
+    case $LOGTYPE in
+        VpcLogs)
+            vpcquery_ops ; [[ $? -eq $OK_STATE ]] || return $RET
+            QUERY_ID=$($ATHENA_CMD start-query-execution --query-string file://$QUERY --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults)
+                if [ $? -eq $OK_STATE ]; then
+                    verify_query_status $QUERY_ID
+                else
+                    echo -e "Query Execution failed : \n$QUERY_ID"
+                fi
+            ;;
+        AlbLogs)
+            RES=$($ATHENA_CMD get-query-results --query-execution-id $QUERY)
+            [ $? -eq $OK_STATE ] && RET=$OK_STATE && echo -e "Query Results :- \n$RES" || echo -e "Query Failed :- \n$RES";;
+        ElbLogs)
+            elbquery_ops ; [[ $? -eq $OK_STATE ]] || return $RET
+            QUERY_ID=$($ATHENA_CMD start-query-execution --query-string file://$QUERY --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults)
+                if [ $? -eq $OK_STATE ]; then
+                    verify_query_status $QUERY_ID
+                else
+                    echo -e "Query Execution failed : \n$QUERY_ID"
+                fi
+            ;;
+        CustomLog)
+            QUERY_ID=$($ATHENA_CMD start-query-execution --query-string file://$QUERY --query-execution-context Database=$DATABASE --result-configuration OutputLocation=s3://$RESULT_BUCKET/AthenaResults)
+            if [ $? -eq $OK_STATE ]; then
+                    verify_query_status $QUERY_ID
+            else
+                    echo -e "Query Execution failed : \n$QUERY_ID"
+            fi
+            ;;
+        *)
+            echo "Provide Valid Query Action";;
+    esac
+
+    return $RET
+}
+
+pre_op(){
+    local FUNC=pre_op
+    local ret=${FAILED_STATE}
+    local config=$1
+
+    [ -f $config ] && source $config || return $FAILED_STATE
+    ret=$?
+
+return $ret
+}
+
+do_op(){
+    local FUNC=do_op
+    local ret=${FAILED_STATE}
+    local config=$1
+
+    [ -f $config ] && source $config || return $RET
+    case $UTIL in
+        db)
+            db_action $config ; [ $? -eq $FAILED_STATE ] || RET=$OK_STATE
+            ;;
+        table)
+            table_action ; [ $? -eq $FAILED_STATE ] || RET=$OK_STATE
+            ;;
+        query)
+            query_action ; [ $? -eq $FAILED_STATE ] || RET=$OK_STATE
+            ;;
+        *)
+            echo "Provide valid -u option i.e [db|table|query]";;
+    esac
+    return $RET
+}
+
+post_op(){
+    local RET=${FAILED_STATE}
+    echo -e "$1"
+    RET=${OK_STATE}
+return $RET
+}
+
+#-----
+# public
+#-----
+
+usage(){
+    RET=${FAILED_STATE}
+    echo_txt ""
+    echo_txt "Usage : $PROGNAME -[options] "
+    echo_txt "\tDescription: $DESCRIPTION"
+    echo_txt "\tOptions:"
+    echo_txt "\t\t -h : this usage, ie : $PROGNAME -h"
+    echo_txt "\t\t -c [config_file] : require config file , ie: /usr/local/bin/athena-utils -c /opt/config/athena-utils.conf "
+    echo_txt ""
+    return ${OK_STATE}
+}
+
+# --- the above should be modified to accomodate the service
+main(){
+local FUNC=main
+#log_msg "$FUNC" "option:$\@"
+if [[ 0 -lt $# ]]; then
+    local RET=${FAILED_STATE}
+    local CFLAG=${FAILED_STATE} # Config flag
+    local CONFIG=NULL
+    local OPTCNT=0
+    while getopts "hu:c:" opt ;
+    do
+        #log_msg "$FUNC" "opt:$opt"
+        case $opt in
+        h) usage ; RET=$? ; RET=${FAILED_STATE} ;;
+        c) CFLAG=$OK_STATE && CONFIG=$OPTARG ;;
+        *) RET=$FAILED_STATE ;;
+        esac
+    done
+        if [ $CFLAG -eq $OK_STATE ]; then
+        pre_op $CONFIG
+        RET=$?
+        if [ ${OK_STATE} -eq $RET ]; then
+            RES=$(do_op $CONFIG)
+            RET=$?
+            if [[ ${OK_STATE} -eq $RET ]]; then
+                post_op "$RES"
+                RET=$?
+            else
+                log_msg "$FUNC" "failed in do_op : $RET  in do_op"
+            fi
+        else
+            log_msg "$FUNC" "failed in pre_op :$RET with RES: $CONFIG file doesn't exists"
+        fi
+        else
+            log_msg "$FUNC" "failed in get-opts : Provide $PROGNAME Config File"
+        fi
+
+
+else
+    usage
+    RET=$?
+fi
+return $RET
+}
+
+log_msg "$PROGNAME" "started"
+main "$@"
+RET=$?
+log_msg "$PROGNAME" "ended: $RET"
+exit $RET
